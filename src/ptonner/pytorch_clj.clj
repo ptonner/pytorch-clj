@@ -133,8 +133,10 @@
         (sequential? m) (map as-module m)
         :else m))
 
+
 ;!zprint {:format :skip}
 (comment
+  ;; (require-python '[torch.nn.functional :as nnf])
   (as-module (nn/Linear 3 10))
   (as-module #(nn/Linear 3 10))
   (as-module [(nn/Linear 3 10) (nn/Linear 4 10)])
@@ -188,19 +190,33 @@
     (time (fwd x))
     (time (s x))))
 
-(defn chain [& modules] (apply cfn nn/Sequential (map as-module modules)))
+(defn chain
+  [& modules]
+  (->> modules
+       (map as-module)
+       flatten
+       (apply cfn nn/Sequential)))
+
 
 ;!zprint {:format :skip}
 (comment
   (let [c1 (nn/Linear 3 4)
-        c2 (apply add (repeatedly 3 #(nn/Linear 4 2)))
+        c2 (add (repeatedly 3 #(nn/Linear 4 2)))
         c (chain c1 c2)
         x (torch/randn 2 3)]
     (torch/allclose
      (c x)
      (-> x
          c1
-         c2))))
+         c2)))
+  (let [c1 (nn/Linear 3 4)
+        c2 (add (repeatedly 3 #(nn/Linear 4 2)))
+        c3 (clone 3 nn/Linear 2 2)
+        c (chain c1 c2 c3)
+        x (torch/randn 2 3)]
+    (torch/allclose
+     (c x)
+     (-> x c1 c2 c3))))
 
 ;!zprint {:format :skip}
 (comment
