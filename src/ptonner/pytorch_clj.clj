@@ -6,6 +6,7 @@
             [libpython-clj2.python :as py :refer
              [cfn path->py-obj python-type py. py..]]
             [libpython-clj2.require :refer [require-python]]
+            [libpython-clj2.python.class :as py-class]
             [libpython-clj2.python.np-array]
             [tech.v3.dataset :as ds]
             [tech.v3.dataset.column-filters :as cf]
@@ -100,13 +101,6 @@
 
 (require-python '[torch.nn :as nn])
 
-(defn as-module
-  [m]
-  (cond (and (= :pyobject (type m)) (py/is-instance? m nn/Module)) m
-        (fn? m) (m)
-        (sequential? m) (py/make-callable (apply juxt m))
-        :else m))
-
 (defn module
   [name & args]
   (let [mod (path->py-obj
@@ -122,63 +116,62 @@
   (py/create-class
    "-Module"
    [nn/Module]
-   {"__init__" (py/make-instance-fn
+   {"__init__" (py-class/make-tuple-instance-fn
                 (fn [self fwd modules]
                   (py. nn/Module __init__ self)
                   (py/set-attrs! self
                                  {"fwd" fwd, "modules" (nn/ModuleList modules)})
                   nil)),
-    "forward" (py/make-instance-fn (fn [self & args]
-                                     (let [fwd (py/get-attr self "fwd")]
-                                       (apply cfn fwd args))))}))
+    "forward" (py-class/make-tuple-instance-fn
+               (fn [self & args]
+                 (let [fwd (py/get-attr self "fwd")] (apply cfn fwd args))))}))
+
+(defn as-module
+  [m]
+  (cond (and (= :pyobject (type m)) (py/is-instance? m nn/Module)) m
+        (fn? m) (as-module (m))
+        (sequential? m) (cfn nn/ModuleList (map as-module m))
+        :else m))
 
 ;!zprint {:format :skip}
 (comment
-  (require-python '[builtins :as python])
-  (let [mods [(nn/Linear 3 4) (nn/Linear 3 4)]
-        bcast (apply juxt mods)
-        fwd (fn [X] (reduce torch/add (bcast X)))
-        m (-Module fwd mods)
-        x (torch/randn 2 3)]
-    (m x)
-    ;; (python/list (py. m named_parameters))
-    )
-  (-> (nn/Sequential (nn/Linear 10 3))
-      (py. named_parameters)
-      python/list))
+  (as-module (nn/Linear 3 10))
+  (as-module #(nn/Linear 3 10))
+  (as-module [(nn/Linear 3 10) (nn/Linear 4 10)])
+  (as-module (repeatedly 2 #(nn/Linear 3 10))))
 
-(def ^:private -AddModule
-  (py/create-class
-   "-AddModule"
-   [nn/Module]
-   {"__init__" (py/make-instance-fn
-                (fn [self & modules]
-                  (py. nn/Module __init__ self)
-                  ;; (prn ((apply juxt modules)
-                  ;;       (torch/randn 2 3)))
-                  (py/set-attrs! self
-                                 {"modules" modules,
-                                  "broadcast" (apply juxt modules)})
-                  nil)),
-    "forward" (py/make-instance-fn
-               (fn [self X]
-                 (prn (py/->jvm (py/get-attr self "modules")))
-                 (let [bcast (apply juxt
-                                    (py/->jvm (py/get-attr self "modules")))]
-                   (prn bcast)
-                   (prn (py/->jvm X))
-                   (prn (bcast X))
-                   (reduce torch/add (bcast X)))))}))
 (defn add
   [& modules]
-  (-AddModule modules)
-  ;; (let [modules (vec (map as-module modules))
-  ;;       broadcast (apply juxt modules)]
-  ;;   (py/make-callable (fn [X] (reduce torch/add (broadcast X)))))
-)
+  (let [modules (map as-module modules)
+        bcast (apply juxt modules)
+        fwd (fn [X] (reduce torch/add (bcast X)))]
+    (-Module fwd modules)))
 
 ;!zprint {:format :skip}
 (comment
+  ;; NOTE: this seems to show the overhead is pretty bad (e.g. twice
+  ;; as slow)? although maybe it would be comparable going into a pure
+  ;; python class as well, since a certain level of cost comes from
+  ;; getting the python attrs in the forward method? should check this
+  (let [l1 (nn/Linear 3 4)
+        l2 (nn/Linear 3 4)
+        x (torch/randn 2 3)
+        bcast (juxt l1 l2)
+        fwd (fn [X] (apply cfn torch/add (bcast X)))
+        a (add l1 l2)]
+    (time (a x))
+    (time (fwd x))
+    (time (torch/add (l1 x)
+                     (l2 x))))
+  (let [mods (repeatedly 100 #(nn/Linear 3 3))
+        x (torch/randn 2 3)
+        bcast (apply juxt mods)
+        fwd (fn [X] (reduce torch/add (bcast X)))
+        a (apply add mods)
+        s (apply cfn nn/Sequential mods)]
+    (time (a x))
+    (time (fwd x))
+    (time (s x)))
   (reduce torch/add
           [(torch/randn 2 3)
            (torch/randn 2 3)
