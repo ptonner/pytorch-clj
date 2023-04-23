@@ -293,10 +293,13 @@
         kw (dissoc kw :algorithm)]
     (apply optim params (mapcat identity kw))))
 
+;; Loss functions
+
 
 ;; Training
 
 (require-python '[torch.utils.data :refer [DataLoader]])
+(require-python '[builtins :as python])
 
 (defn- minibatch
   [model loss-fn optimizer device X Y]
@@ -306,7 +309,8 @@
                                    Yhat (model X)
                                    loss (loss-fn Yhat Y)]
                                (py. loss backward)
-                               (py. optimizer step))))
+                               (py. optimizer step)
+                               (py. loss item))))
 
 (defn train
   ([dataset model loss-fn] (train dataset model loss-fn {}))
@@ -319,11 +323,23 @@
          optimizer (as-optim parameters optimizer)
          device (or device "cpu")]
      (py. model train)
-     (dorun
-      (for [e (range epochs)]
-        (dorun (for [batch loader]
-                 (apply minibatch model loss-fn optimizer device batch)))))
-     model)))
+     (loop [epochs (range epochs)
+            batches (seq (python/enumerate loader))
+            history []]
+       (if (seq batches)
+         (let [[[i b] & batches] batches
+               loss (apply minibatch model loss-fn optimizer device b)]
+           (recur epochs
+                  batches
+                  (conj history {:epoch (first epochs), :batch i, :loss loss})))
+         (if (seq epochs)
+           (recur (rest epochs)
+                  (-> loader
+                      python/enumerate
+                      seq)
+                  history)
+           {:model model, :history history}))))))
+
 
 ;!zprint {:format :skip}
 (comment
@@ -340,14 +356,12 @@
                         :optimizer {:algorithm :adam-w :lr 0.01}
                         :loader {:batch_size 32}
                         })]
+    (clojure.pprint/pprint trained)
     (py/with [_ (torch/no_grad)]
              (-> (torch/sub
                   (py.- truth weight)
-                  (py.- trained weight))
+                  (py.- (:model trained) weight))
                  torch/abs
                  torch/sum)))
-
-  (let [foo (fn [& args] args)]
-    (apply foo :a :b (flatten (into [] {:c :d :e :f}))))
 
   (libpython-clj2.python.fn/args->pos-kw-args [[(py/->py-dict {"a" 1})] :lr 0.1]))
