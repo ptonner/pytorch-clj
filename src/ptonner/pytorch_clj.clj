@@ -293,8 +293,12 @@
         kw (dissoc kw :algorithm)]
     (apply optim params (mapcat identity kw))))
 
-;; Loss functions
-
+;; Loss function
+(defn as-loss-fn
+  [lfn & {:as kw}]
+  (let [loss-fn (resolve-py "torch.nn.functional"
+                            (csk/->snake_case_string (name lfn)))]
+    (fn [yhat y] (apply loss-fn yhat y (mapcat identity kw)))))
 
 ;; Training
 
@@ -343,6 +347,7 @@
 
 ;!zprint {:format :skip}
 (comment
+  (require-python '[torch.nn.functional :as nnf])
   (let [p 10
         N 1000
         truth (nn/Linear p 1)
@@ -351,7 +356,7 @@
         y (torch/add y (torch/mul 0.1 (torch/randn_like y)))
         ds (TensorDataset X y)
         trained (train ds (nn/Linear p 1)
-                       (resolve-py "torch.nn.functional" "mse_loss")
+                       (as-loss-fn :mse-loss :reduction "sum")
                        {:epochs 2
                         :optimizer {:algorithm :adam-w :lr 0.01}
                         :loader {:batch_size 32}
