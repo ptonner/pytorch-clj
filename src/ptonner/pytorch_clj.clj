@@ -341,7 +341,7 @@
         ds (TensorDataset X y)
         trained (train ds (nn/Linear p 1)
                        (resolve-py "torch.nn.functional" "mse_loss")
-                       {:epochs 10
+                       {:epochs 3
                         ;; :loader {:batch_size 32}
                         })]
     (py/with [_ (torch/no_grad)]
@@ -350,15 +350,3 @@
                   (py.- trained weight))
                  torch/abs
                  torch/sum))))
-
-(let [p 10
-      N 100
-      truth (nn/Linear p 1)
-      X (torch/randn N p)
-      y (py/with [_ (torch/no_grad)] (truth X))
-      y (torch/add y (torch/mul 0.1 (torch/randn_like y)))
-      ds (TensorDataset X y)]
-  (train ds
-         (nn/Linear p 1)
-         (resolve-py "torch.nn.functional" "mse_loss")
-         {:epochs 10}))
