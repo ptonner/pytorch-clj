@@ -130,7 +130,7 @@
   [m]
   (cond (and (= :pyobject (type m)) (py/is-instance? m nn/Module)) m
         (fn? m) (as-module (m))
-        (sequential? m) (cfn nn/ModuleList (map as-module m))
+        (sequential? m) (map as-module m)
         :else m))
 
 ;!zprint {:format :skip}
@@ -142,14 +142,16 @@
 
 (defn add
   [& modules]
-  (let [modules (map as-module modules)
+  (let [modules (flatten (as-module modules))
         bcast (apply juxt modules)
         fwd (fn [X] (reduce torch/add (bcast X)))]
     (-Module fwd modules)))
 
 ;!zprint {:format :skip}
 (comment
-  ;; NOTE: basic test
+  (as-module [(repeatedly 2 #(nn/Linear 3 4))])
+  (as-module [(nn/Linear 3 4) (nn/Linear 3 4)])
+  ;; NOTE: basic tests
   (let [l1 (nn/Linear 3 4)
         l2 (nn/Linear 3 4)
         l3 (nn/Linear 3 4)
@@ -157,6 +159,11 @@
         a (add l1 l2 l3)]
     (torch/allclose (a x) (reduce torch/add
                                   [(l1 x) (l2 x) (l3 x)])))
+  (let [mods (repeatedly 10 #(nn/Linear 3 4))
+        x (torch/randn 2 3)
+        a (add mods)]
+    (torch/allclose (a x) (reduce torch/add
+                                  (map #(% x) mods))))
   ;; NOTE: this seems to show the overhead is pretty bad (e.g. twice
   ;; as slow)? although maybe it would be comparable going into a pure
   ;; python class as well, since a certain level of cost comes from
@@ -179,20 +186,21 @@
         s (apply cfn nn/Sequential mods)]
     (time (a x))
     (time (fwd x))
-    (time (s x)))
-  (reduce torch/add
-          [(torch/randn 2 3)
-           (torch/randn 2 3)
-           (torch/randn 2 3)])
-  ((apply juxt [(nn/Linear 3 10)
-                (nn/Linear 3 10)])
-   (torch/randn 2 3))
-  (let [a (add (nn/Linear 3 10)
-               (nn/Linear 3 10))
-        x (torch/randn 2 3)]
-    (a x)))
+    (time (s x))))
 
 (defn chain [& modules] (apply cfn nn/Sequential (map as-module modules)))
+
+;!zprint {:format :skip}
+(comment
+  (let [c1 (nn/Linear 3 4)
+        c2 (apply add (repeatedly 3 #(nn/Linear 4 2)))
+        c (chain c1 c2)
+        x (torch/randn 2 3)]
+    (torch/allclose
+     (c x)
+     (-> x
+         c1
+         c2))))
 
 ;!zprint {:format :skip}
 (comment
