@@ -149,6 +149,14 @@
 
 ;!zprint {:format :skip}
 (comment
+  ;; NOTE: basic test
+  (let [l1 (nn/Linear 3 4)
+        l2 (nn/Linear 3 4)
+        l3 (nn/Linear 3 4)
+        x (torch/randn 2 3)
+        a (add l1 l2 l3)]
+    (torch/allclose (a x) (reduce torch/add
+                                  [(l1 x) (l2 x) (l3 x)])))
   ;; NOTE: this seems to show the overhead is pretty bad (e.g. twice
   ;; as slow)? although maybe it would be comparable going into a pure
   ;; python class as well, since a certain level of cost comes from
