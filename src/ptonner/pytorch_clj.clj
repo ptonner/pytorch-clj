@@ -4,7 +4,7 @@
             [clojure.string :as str]
             clojure.walk
             [libpython-clj2.python :as py :refer
-             [cfn path->py-obj python-type py. py.. py.-
+             [cfn path->py-obj python-type py. py.. py.- py* py**
               with-gil-stack-rc-context]]
             [libpython-clj2.require :refer [require-python]]
             [libpython-clj2.python.class :as py-class]
@@ -123,13 +123,6 @@
 
 (require-python '[torch.nn :as nn])
 (defonce torch-nn-module (py/import-module "torch.nn"))
-
-(defn module
-  [name & args]
-  (let [mod (path->py-obj
-             (str "torch.nn."
-                  (if (keyword? name) (csk/->PascalCaseString name) name)))]
-    (apply cfn mod args)))
 
 (def ^:private -Module
   (py/create-class
@@ -296,8 +289,10 @@
 (defn as-optim
   [parameters {:keys [algorithm], :as kw}]
   (let [params (maybe->parameters parameters)
-        optim (resolve-py "torch.optim" (optim-name algorithm))]
-    (apply cfn optim params (dissoc kw :algorithm))))
+        optim (resolve-py "torch.optim" (optim-name algorithm))
+        kw (dissoc kw :algorithm)]
+    (apply optim params (mapcat identity kw))))
+
 
 ;; Training
 
@@ -319,7 +314,7 @@
     {:keys [optimizer loader parameters epochs device],
      :or {optimizer {:algorithm :adam-w}, loader {}, epochs 1}}]
    (let [dataset (maybe->tensor-dataset dataset)
-         loader (apply cfn DataLoader dataset loader)
+         loader (apply DataLoader dataset (mapcat identity loader))
          parameters (or parameters [(optim-group model)])
          optimizer (as-optim parameters optimizer)
          device (or device "cpu")]
@@ -341,12 +336,18 @@
         ds (TensorDataset X y)
         trained (train ds (nn/Linear p 1)
                        (resolve-py "torch.nn.functional" "mse_loss")
-                       {:epochs 3
-                        ;; :loader {:batch_size 32}
+                       {:epochs 2
+                        :optimizer {:algorithm :adam-w :lr 0.01}
+                        :loader {:batch_size 32}
                         })]
     (py/with [_ (torch/no_grad)]
              (-> (torch/sub
                   (py.- truth weight)
                   (py.- trained weight))
                  torch/abs
-                 torch/sum))))
+                 torch/sum)))
+
+  (let [foo (fn [& args] args)]
+    (apply foo :a :b (flatten (into [] {:c :d :e :f}))))
+
+  (libpython-clj2.python.fn/args->pos-kw-args [[(py/->py-dict {"a" 1})] :lr 0.1]))
