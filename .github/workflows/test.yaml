@@ -1,4 +1,4 @@
-name: Test and Package project
+name: Run tests
 on:
   pull_request:
   push:
@@ -10,15 +10,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
-      - name: Cache Clojure Dependencies
-        uses: actions/cache@v3
-        with:
-          path:
-            - ~/.m2
-            - ~/.gitlibs
-          key: cache-${{ hashFiles('**/deps.edn') }}
-          restore-keys: clojure-deps-
 
       - name: Prepare java
         uses: actions/setup-java@v3
