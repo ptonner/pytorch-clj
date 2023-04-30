@@ -46,7 +46,6 @@ jobs:
 
       - name: Setup python environment
         run: |
-          which pip
           pip install --user pipenv
           pipenv install -d
 
