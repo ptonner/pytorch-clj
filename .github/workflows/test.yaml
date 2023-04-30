@@ -37,23 +37,21 @@ jobs:
           key: cljdeps-${{ hashFiles('deps.edn') }}
           restore-keys: cljdeps-
 
-      - name: setup python environment
+      - name: Setup python
         uses: "gabrielfalcao/pyenv-action@v13"
         with:
             default: 3.10
             command: |
               pip install -U pip setuptools
-              pip install --user pipenv
-              pipenv install -d
+
+      - name: Setup python environment
+        run: |
+          which pip
+          pip install --user pipenv
+          pipenv install -d
 
       - name: tree structure
-        run: |
-          tree -a
-
-      # - name: Install python dependencies
-      #   uses: VaultVulp/action-pipenv@v2.0.1
-      #   with:
-      #     command: install -d # Install all dependencies, including development ones
+        run: tree -a
     
       - name: Run Unit tests
         run: clojure -M:test
