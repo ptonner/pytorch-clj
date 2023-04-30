@@ -217,7 +217,7 @@
 
 (defn map-list
   [module]
-  (let [module (as-module)
+  (let [module (as-module module)
         fwd (fn [& args] (map module args))]
     (into-module fwd [module])))
 

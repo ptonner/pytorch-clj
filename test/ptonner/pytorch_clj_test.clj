@@ -119,6 +119,16 @@
                                                 r (residual m)]
                                             (py/->jvm (params-match? m r)))))))
 
+(deftest map-list-test
+  (testing "Basic `map-list` usage"
+           (with-gil-stack-rc-context
+            (let [m (nn/Linear 3 3)
+                  mp (map-list m)
+                  X [(torch/randn 2 3) (torch/randn 1 3)]
+                  out (apply mp X)]
+              (is (every? true? (map torch/allclose out (map m X))))))))
+
+
 ;; Optim
 
 (deftest maybe->parameters-test
