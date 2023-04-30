@@ -60,16 +60,19 @@
   (-> (torch/zeros 10 10)
       tensor->ds))
 
+(defn- numeric-ds?
+  [ds]
+  (every? true?
+          (map #(-> %
+                    meta
+                    :datatype
+                    tech.v3.datatype.casting/numeric-type?)
+               (ds/columns ds))))
+
 (defn- assert-numeric-ds
   [ds]
-  (errors/when-not-error
-   (every? true?
-           (map #(-> %
-                     meta
-                     :datatype
-                     tech.v3.datatype.casting/numeric-type?)
-                (ds/columns ds)))
-   "All values of target columns need to be numeric."))
+  (errors/when-not-error (numeric-ds? ds)
+                         "All values of target columns need to be numeric."))
 
 (defn numeric-ds->ndarray
   [ds]
