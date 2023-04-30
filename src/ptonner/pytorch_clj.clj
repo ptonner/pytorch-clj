@@ -18,8 +18,8 @@
 
 (py/initialize!)
 (defonce torch-module (py/import-module "torch"))
-(log/info "'pytorch' version found: "
-          (get (py/module-dict torch-module) "__version__"))
+(defonce torch-version (get (py/module-dict torch-module) "__version__"))
+(log/info "'pytorch' version found: " torch-version)
 
 (require-python '[torch])
 
@@ -153,14 +153,17 @@
                (fn [self & args]
                  (let [fwd (py/get-attr self "fwd")] (apply cfn fwd args))))}))
 
+(defn into-module
+  ([fwd] (into-module fwd nil nil))
+  ([fwd modules] (into-module fwd modules nil))
+  ([fwd modules params] (-Module fwd modules params)))
+
 (defn as-module
   [m]
   (cond (and (= :pyobject (type m)) (py/is-instance? m nn/Module)) m
         (fn? m) (as-module (m))
         (sequential? m) (map as-module m)
         :else m))
-
-(defn into-module [fwd modules params])
 
 (defn module? [m] (py/is-instance? m (py/get-attr torch-nn-module "Module")))
 
@@ -179,57 +182,9 @@
         fwd (fn [X] (reduce torch/add (bcast X)))]
     (-Module fwd modules)))
 
-;!zprint {:format :skip}
-(comment
-  ;; NOTE: basic tests
-  (let [l1 (nn/Linear 3 4)
-        l2 (nn/Linear 3 4)
-        l3 (nn/Linear 3 4)
-        x (torch/randn 2 3)
-        a (add l1 l2 l3)]
-    (torch/allclose (a x) (reduce torch/add
-                                  [(l1 x) (l2 x) (l3 x)])))
-  (let [mods (repeatedly 10 #(nn/Linear 3 4))
-        x (torch/randn 2 3)
-        a (add mods)]
-    (torch/allclose (a x) (reduce torch/add
-                                  (map #(% x) mods))))
-  ;; NOTE: this seems to show the overhead is pretty bad (e.g. twice
-  ;; as slow)? although maybe it would be comparable going into a pure
-  ;; python class as well, since a certain level of cost comes from
-  ;; getting the python attrs in the forward method? should check this
-  (let [l1 (nn/Linear 3 4)
-        l2 (nn/Linear 3 4)
-        x (torch/randn 2 3)
-        bcast (juxt l1 l2)
-        fwd (fn [X] (apply cfn torch/add (bcast X)))
-        a (add l1 l2)]
-    (time (a x))
-    (time (fwd x))
-    (time (torch/add (l1 x)
-                     (l2 x))))
-  (let [mods (repeatedly 100 #(nn/Linear 3 3))
-        x (torch/randn 2 3)
-        bcast (apply juxt mods)
-        fwd (fn [X] (reduce torch/add (bcast X)))
-        a (apply add mods)
-        s (apply cfn nn/Sequential mods)]
-    (time (a x))
-    (time (fwd x))
-    (time (s x))))
-
 (defn clone
   [n module-fn & args]
-  (apply cfn nn/Sequential (repeatedly n #(apply module-fn args))))
-
-;!zprint {:format :skip}
-(comment
-  (let [c (clone 3 nn/Linear 3 3)
-        mods (python/list c)
-        x (torch/randn 3 3)]
-    (torch/allclose
-     (c x)
-     (reduce #(%2 %1) x mods))))
+  (apply nn/Sequential (repeatedly n #(apply module-fn args))))
 
 (defn chain
   [& modules]
@@ -238,37 +193,14 @@
        flatten
        (apply cfn nn/Sequential)))
 
-;!zprint {:format :skip}
-(comment
-  (let [c1 (nn/Linear 3 4)
-        c2 (add (repeatedly 3 #(nn/Linear 4 2)))
-        c (chain c1 c2)
-        x (torch/randn 2 3)]
-    (torch/allclose
-     (c x)
-     (-> x
-         c1
-         c2)))
-  (let [c1 (nn/Linear 3 4)
-        c2 (add (repeatedly 3 #(nn/Linear 4 2)))
-        c3 (clone 3 nn/Linear 2 2)
-        c (chain c1 c2 c3)
-        x (torch/randn 2 3)]
-    (torch/allclose
-     (c x)
-     (-> x c1 c2 c3))))
-
 (defn concatenate
-  ([modules] (concatenate modules 0))
-  ([modules dim]
-   (let [bcast (juxt modules)
-         fwd (fn [X]
-               (-> X
-                   bcast
-                   (torch/stack dim)))]
-     (-Module fwd modules))))
-
-(comment (let [cct (concatenate [(nn/Linear 4 4) (nn/Linear 4 4)])] cct))
+  [& modules]
+  (let [bcast (apply juxt modules)
+        fwd (fn [X]
+              (-> X
+                  bcast
+                  torch/hstack))]
+    (into-module fwd modules)))
 
 ;; Optimizer
 
