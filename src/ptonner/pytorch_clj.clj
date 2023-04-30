@@ -129,11 +129,26 @@
    "-Module"
    [nn/Module]
    {"__init__" (py-class/make-tuple-instance-fn
-                (fn [self fwd modules]
-                  (py. nn/Module __init__ self)
-                  (py/set-attrs! self
-                                 {"fwd" fwd, "modules" (nn/ModuleList modules)})
-                  nil)),
+                (fn module-init
+                  ([self fwd] (module-init self fwd nil nil))
+                  ([self fwd modules] (module-init self fwd modules nil))
+                  ([self fwd modules parameters]
+                   (py. nn/Module __init__ self)
+                   (py/set-attrs!
+                    self
+                    {"fwd" fwd,
+                     ;; TODO: make sure these branches line up with the types
+                     ;; that will actually come in from maps and vectors
+                     "modules" (condp = (py/python-type modules)
+                                 :jvm-map-as-python (nn/ModuleDict modules)
+                                 :jvm-iterable-as-python (nn/ModuleList modules)
+                                 nil),
+                     "params" (condp = (py/python-type parameters)
+                                :jvm-iterable-as-python (nn/ParameterList
+                                                         parameters)
+                                :jvm-map-as-python (nn/ParameterDict parameters)
+                                nil)})
+                   nil))),
     "forward" (py-class/make-tuple-instance-fn
                (fn [self & args]
                  (let [fwd (py/get-attr self "fwd")] (apply cfn fwd args))))}))
@@ -145,8 +160,9 @@
         (sequential? m) (map as-module m)
         :else m))
 
-(defn module? [m] (py/is-instance? m (py/get-attr torch-nn-module "Module")))
+(defn into-module [fwd modules params])
 
+(defn module? [m] (py/is-instance? m (py/get-attr torch-nn-module "Module")))
 
 ;!zprint {:format :skip}
 (comment
@@ -165,8 +181,6 @@
 
 ;!zprint {:format :skip}
 (comment
-  (as-module [(repeatedly 2 #(nn/Linear 3 4))])
-  (as-module [(nn/Linear 3 4) (nn/Linear 3 4)])
   ;; NOTE: basic tests
   (let [l1 (nn/Linear 3 4)
         l2 (nn/Linear 3 4)
@@ -224,7 +238,6 @@
        flatten
        (apply cfn nn/Sequential)))
 
-
 ;!zprint {:format :skip}
 (comment
   (let [c1 (nn/Linear 3 4)
@@ -245,6 +258,18 @@
      (c x)
      (-> x c1 c2 c3))))
 
+(defn concatenate
+  ([modules] (concatenate modules 0))
+  ([modules dim]
+   (let [bcast (juxt modules)
+         fwd (fn [X]
+               (-> X
+                   bcast
+                   (torch/stack dim)))]
+     (-Module fwd modules))))
+
+(comment (let [cct (concatenate [(nn/Linear 4 4) (nn/Linear 4 4)])] cct))
+
 ;; Optimizer
 
 (defn maybe->parameters
@@ -262,11 +287,10 @@
      (py/->py-dict (assoc options "params" params)))))
 
 ;!zprint {:format :skip}
-(comment
-  (maybe->parameters (nn/Linear 10 10))
-  (maybe->parameters (py. (nn/Linear 10 10) parameters))
-  (py/is-instance? (optim-group (nn/Linear 10 10) {:lr 1e-3})
-                   python/dict))
+(comment (maybe->parameters (nn/Linear 10 10))
+         (maybe->parameters (py. (nn/Linear 10 10) parameters))
+         (py/is-instance? (optim-group (nn/Linear 10 10) {:lr 1e-3})
+                          python/dict))
 
 (defn- optim-name
   "Need to do some specialized work with optimizer names b/c of atypical naming conventions (e.g. SGD)"
