@@ -6,6 +6,8 @@ on:
       - main
 jobs:
   clojure:
+    env:
+      PIPENV_VENV_IN_PROJECT: 1
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,5 +26,38 @@ jobs:
           cljstyle: 0.15.0 # cljstyle
           clj-kondo: 2022.10.05 # Clj-kondo
 
+      - name: Cache clojure dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          # List all files containing dependencies:
+          key: cljdeps-${{ hashFiles('deps.edn') }}
+          restore-keys: cljdeps-
+
+      - name: setup python environment
+        uses: "gabrielfalcao/pyenv-action@v13"
+        with:
+            default: 3.10
+            command: |
+              pip install -U pip setuptools
+
+      - name: tree structure
+        run: |
+          tree
+          ls -al
+
+      - name: Debug python environment
+        run: |
+          which pip
+          pip install --user pipenv
+          pipenv install -d
+      # - name: Install python dependencies
+      #   uses: VaultVulp/action-pipenv@v2.0.1
+      #   with:
+      #     command: install -d # Install all dependencies, including development ones
+    
       - name: Run Unit tests
         run: clojure -M:test
