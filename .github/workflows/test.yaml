@@ -43,17 +43,13 @@ jobs:
             default: 3.10
             command: |
               pip install -U pip setuptools
+              pip install --user pipenv
+              pipenv install -d
 
       - name: tree structure
         run: |
-          tree
-          ls -al
+          tree -a
 
-      - name: Debug python environment
-        run: |
-          which pip
-          pip install --user pipenv
-          pipenv install -d
       # - name: Install python dependencies
       #   uses: VaultVulp/action-pipenv@v2.0.1
       #   with:
