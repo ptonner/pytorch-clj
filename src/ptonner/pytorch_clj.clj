@@ -144,6 +144,7 @@
                      ;; that will actually come in from maps and vectors
                      "modules" (condp = (py/python-type modules)
                                  :jvm-map-as-python (nn/ModuleDict modules)
+                                 :tuple (nn/ModuleList modules)
                                  :jvm-iterable-as-python (nn/ModuleList modules)
                                  nil),
                      "params" (condp = (py/python-type parameters)
@@ -197,6 +198,9 @@
        (apply cfn nn/Sequential)))
 
 (defn concatenate
+  "Concatenate the output of multiple modules.
+
+  For modules `f` and `g`, ((concatenate f g) x) is equivalent to (torch/hstack (f x) (g x))"
   [& modules]
   (let [bcast (apply juxt modules)
         fwd (fn [X]
@@ -204,6 +208,18 @@
                   bcast
                   torch/hstack))]
     (into-module fwd modules)))
+
+(defn residual
+  [module]
+  (let [module (as-module module)
+        fwd (fn [X] (torch/add X (module X)))]
+    (into-module fwd [module])))
+
+(defn map-list
+  [module]
+  (let [module (as-module)
+        fwd (fn [& args] (map module args))]
+    (into-module fwd [module])))
 
 ;; Optimizer
 
@@ -221,12 +237,6 @@
    (let [params (maybe->parameters model-or-parameters)]
      (py/->py-dict (assoc options "params" params)))))
 
-;!zprint {:format :skip}
-(comment (maybe->parameters (nn/Linear 10 10))
-         (maybe->parameters (py. (nn/Linear 10 10) parameters))
-         (py/is-instance? (optim-group (nn/Linear 10 10) {:lr 1e-3})
-                          python/dict))
-
 (defn- optim-name
   "Need to do some specialized work with optimizer names b/c of atypical naming conventions (e.g. SGD)"
   [o]
@@ -236,14 +246,6 @@
       (str/replace #"(?i)sgd" "SGD")
       (str/replace #"(?i)rms" "RMS")
       (str/replace #"(?i)bfgs" "BFGS")))
-
-(comment (resolve-py "torch.optim" (optim-name :adam))
-         (resolve-py "torch.optim" (optim-name :adam-w))
-         (resolve-py "torch.optim" (optim-name :sgd))
-         (resolve-py "torch.optim" (optim-name :asgd))
-         (resolve-py "torch.optim" (optim-name :lbfgs))
-         (resolve-py "torch.optim" (optim-name :rmsprop)))
-
 
 (defn as-optim
   [parameters {:keys [algorithm], :as kw}]
