@@ -93,7 +93,7 @@
       tensor->ds
       numeric-ds->tensor))
 
-(require-python '[torch.utils.data :refer [TensorDataset]])
+(require-python '[torch.utils.data :refer [TensorDataset Dataset]])
 
 (def split-ds (juxt cf/feature cf/target))
 
@@ -112,7 +112,6 @@
 
 ;!zprint {:format :skip}
 (comment
-  (py/python-type (torch/ones 10 10))
   (-> (torch/ones 10 10)
       tensor->ds
       ;; (ds-mod/set-inference-target [0 1])
@@ -121,6 +120,45 @@
       type
       ;; (py/get-item 0)
       ))
+
+(defn dataset->indexer
+  ([ds] (dataset->indexer ds {}))
+  ([ds {:keys [device], :or {device "cpu"}}]
+   (if (numeric-ds? ds)
+     (let [t (py. (numeric-ds->tensor ds) to device)]
+       (fn [idx] (py/->py-dict {(ds/dataset-name ds) (py/get-item t [idx])})))
+     (fn [idx]
+       (->> idx
+            (ds/row-at ds)
+            py/->py-dict)))))
+
+(def ^:private -NamedDataset
+  (py/create-class
+   "-NamedDataset"
+   [Dataset]
+   {"__init__" (py-class/make-tuple-instance-fn
+                (fn [self & indexers]
+                  (py. Dataset __init__ self)
+                  (py/set-attr! self "indexers" indexers))),
+    "__getitem__" (py-class/make-tuple-instance-fn
+                   (fn [self idx]
+                     (let [indexers (py/get-attr self "indexers")]
+                       (loop [ret {}
+                              indexers indexers]
+                         (if (seq indexers)
+                           (let [[i & indexers] indexers]
+                             (recur (py. ret merge (i idx)) indexers))
+                           ret)))))}))
+
+(defn ->named-dataset [& indexers] (apply -NamedDataset indexers))
+
+(comment (let [ds (ds/->dataset {:a [0 1 2], :b [0 3 2]} {:dataset-name :X})
+               indexer (dataset->indexer ds)]
+           (indexer 1))
+         ()
+         (let [ds (ds/->dataset {:a [0 1 2], :b [:a :b :c]})
+               indexer (dataset->indexer ds)]
+           (indexer 1)))
 
 ;; Modules
 
