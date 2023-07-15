@@ -1,0 +1,62 @@
+* Roadmap
+** DONE Training
+CLOSED: [2023-04-23 Sun 16:39]
+:LOGBOOK:
+- State "DONE"       from "TODO"       [2023-04-23 Sun 16:39]
+:END:
+- [X] configuring an optimizer
+- [X] specifying a loss
+** DONE JVM into datasets
+CLOSED: [2023-04-23 Sun 09:09]
+:LOGBOOK:
+- State "DONE"       from "TODO"       [2023-04-23 Sun 09:09]
+:END:
+** DONE Layers from/inspired-by Thinc
+CLOSED: [2023-04-30 Sun 14:22]
+:LOGBOOK:
+- State "DONE"       from "TODO"       [2023-04-30 Sun 14:22]
+:END:
+- [X] clone
+- [X] add
+- [X] chain
+- [X] residual
+- [X] map list
+- [X] concatenate
+** TODO Continuous integration for tests
+** TODO Unit tests
+- [ ] datasets
+- [X] layers
+- [ ] optimization
+** TODO Docstrings
+- [ ] datasets
+- [ ] layers
+- [ ] optimization
+** TODO Branching and merging layers
+- [ ] branch
+- [ ] merge
+** TODO Adapt example
+** TODO Scicloj pipeline support
+** TODO Model definition convenience
+*** DONE Basic sequential specification
+CLOSED: [2023-04-23 Sun 12:19]
+:LOGBOOK:
+- State "DONE"       from "TODO"       [2023-04-23 Sun 12:19]
+:END:
+*** TODO Look into and deal with overhead
+- things are pretty slow converting back and forth from JVM
+*** TODO Declarative syntax
+- also support for model as data? e.g. a list of layers that can be expanded/instantiated when needed
+** TODO Broader dataset support
+- currently only allow for ~X~ and ~Y~ tensors aligning with ~tech.v3.dataset~ ~feature~ and ~target~ columns
+- can we define groups on columns to create different tensor objects?
+** TODO Tracing
+** TODO Progress tracking
+- communicate with async?
+* Acknowledgments
+foundational:
+- libpython-clj
+Code adapted from
+- sklearn-clj
+Inspiration taken from all mentioned above as well as:
+- [[https://github.com/gigasquid/libpython-clj-examples/blob/master/src/gigasquid/pytorch_mnist.clj][Examples from GigaSquid]]
+- https://thinc.ai/
